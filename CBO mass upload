@@ -1,0 +1,455 @@
+class ZCL_ZOTC_CBO_MASS_FILE_DPC_EXT definition
+  public
+  inheriting from ZCL_ZOTC_CBO_MASS_FILE_DPC
+  create public .
+
+public section.
+
+  class-methods CONVERT_DATE
+    importing
+      !IM_DATE_EXT type DATA
+    changing
+      !EX_DATE_IN type DATS .
+
+  methods /IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_STREAM
+    redefinition .
+protected section.
+
+  methods ZCBOFILEUPD_HEAD_GET_ENTITY
+    redefinition .
+  methods ZCBOFILEUPD_MAPS_GET_ENTITYSET
+    redefinition .
+private section.
+
+  methods GET_EXCEL_DATA
+    importing
+      !IS_MAP_HEAD type ZCBOFILEUPD_HEAD
+      !IV_DOCUMENT_NAME type STRING
+      !IS_MEDIA_RESOURCE type /IWBEP/IF_MGW_APPL_TYPES=>TY_S_MEDIA_RESOURCE
+      !IV_ENTITY_NAME type STRING
+    exporting
+      !IT_TAB type TABLE .
+ENDCLASS.
+
+
+
+CLASS ZCL_ZOTC_CBO_MASS_FILE_DPC_EXT IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_ZOTC_CBO_MASS_FILE_DPC_EXT->/IWBEP/IF_MGW_APPL_SRV_RUNTIME~CREATE_STREAM
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_ENTITY_NAME                 TYPE        STRING(optional)
+* | [--->] IV_ENTITY_SET_NAME             TYPE        STRING(optional)
+* | [--->] IV_SOURCE_NAME                 TYPE        STRING(optional)
+* | [--->] IS_MEDIA_RESOURCE              TYPE        TY_S_MEDIA_RESOURCE
+* | [--->] IT_KEY_TAB                     TYPE        /IWBEP/T_MGW_NAME_VALUE_PAIR(optional)
+* | [--->] IT_NAVIGATION_PATH             TYPE        /IWBEP/T_MGW_NAVIGATION_PATH(optional)
+* | [--->] IV_SLUG                        TYPE        STRING
+* | [--->] IO_TECH_REQUEST_CONTEXT        TYPE REF TO /IWBEP/IF_MGW_REQ_ENTITY_C(optional)
+* | [<---] ER_ENTITY                      TYPE REF TO DATA
+* | [!CX!] /IWBEP/CX_MGW_BUSI_EXCEPTION
+* | [!CX!] /IWBEP/CX_MGW_TECH_EXCEPTION
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD /iwbep/if_mgw_appl_srv_runtime~create_stream.
+
+
+    DATA ls_zcbofileupd_head TYPE zcl_zotc_cbo_mass_file_mpc=>ts_zcbofileupd_head.
+    DATA: wa_data TYPE REF TO data.
+    DATA: lt_data TYPE REF TO data.
+    DATA: lt_err_data TYPE REF TO data.
+    DATA: lt_ok_data TYPE REF TO data.
+
+    DATA: lt_mod               TYPE /bobf/t_frw_modification.
+    DATA:  lx_bus_ex     TYPE REF TO /iwbep/cx_mgw_busi_exception.
+    FIELD-SYMBOLS <lt_data> TYPE ANY TABLE.
+    FIELD-SYMBOLS <lt_err_data> TYPE ANY TABLE.
+    FIELD-SYMBOLS <lt_ok_data> TYPE ANY TABLE.
+
+    SPLIT iv_slug AT ',' INTO DATA(lv_identifier) DATA(lv_filename).
+    DATA(lo_message) = mo_context->get_message_container( ).
+
+    SELECT SINGLE * FROM zcbofileupd_head INTO @DATA(ls_head) WHERE identifier = @lv_identifier.
+    .
+    "DATA lt_data TYPE zz1_t_zz1_include_exclude_mat1.
+
+    "GET BOPF object technical info
+    SELECT SINGLE  * FROM /bobf/obm_bo INTO @DATA(ls_bo) WHERE bo_name = @ls_head-cboname.
+    SELECT SINGLE * FROM /bobf/obm_node INTO @DATA(ls_node) WHERE name = @ls_head-cboname AND node_name = @ls_head-node.
+
+    CREATE DATA wa_data TYPE  (ls_node-data_data_type).
+    CREATE DATA lt_data TYPE  (ls_node-data_table_type).
+    CREATE DATA lt_err_data TYPE  (ls_node-data_table_type).
+    CREATE DATA lt_ok_data TYPE  (ls_node-data_table_type).
+
+    ASSIGN lt_data->*  TO  <lt_data>.
+    ASSIGN lt_err_data->*  TO  <lt_err_data>.
+    ASSIGN lt_ok_data->*  TO  <lt_ok_data>.
+
+
+    get_excel_data(
+       EXPORTING
+         is_map_head           = ls_head
+         iv_document_name      = lv_filename
+         is_media_resource     = is_media_resource
+         iv_entity_name        = iv_entity_name
+       IMPORTING
+         it_tab = <lt_data>  ).
+
+    IF ls_head-impl_class IS NOT INITIAL.
+      DATA: meth    TYPE string,
+            class   TYPE string,
+            ptab    TYPE abap_parmbind_tab,
+            etab    TYPE abap_excpbind_tab,
+            lt_mess TYPE soli_tab.
+
+
+      "Interface call
+      "Customer Validation & conversion
+
+      ptab = VALUE #( ( name  = 'IT_DATA'
+                    kind  = cl_abap_objectdescr=>exporting
+                    value = REF #( <lt_data> ) )
+                  ( name  = 'ET_ERR_DATA'
+                    kind  = cl_abap_objectdescr=>importing
+                    value = REF #( <lt_err_data> ) )
+                  ( name  = 'ET_OK_DATA'
+                    kind  = cl_abap_objectdescr=>importing
+                    value = REF #(  <lt_ok_data> ) )
+                  ( name  = 'LT_MESSAGE'
+                    kind  = cl_abap_objectdescr=>importing
+                    value = REF #( lt_mess ) ) ).
+
+
+      CALL METHOD (ls_head-impl_class)=>zif_cbo_mass_file~determine_validate
+        PARAMETER-TABLE ptab.
+*     ZZ1_DVF_INCLUDE_EXCLUDE_MAT_S=>zif_cbo_mass_file~determine_validate(
+*      EXPORTING
+*        it_data     = <lt_data>
+*      IMPORTING
+*        et_err_data = <lt_err_data>
+*        et_ok_data  = <lt_ok_data>
+*        lt_message  = data(lt_mess)
+*    ).
+
+      LOOP AT lt_mess INTO   DATA(ls_data).
+        DATA(msgtype) =  ls_data+0(2).
+        IF msgtype+1(1) =  '/' AND msgtype+0(1) CO 'SsWwEeIi'.
+          IF lv_identifier = 'INCLU_EXCLU_MAT' OR  lv_identifier = 'VENDOR_MAT_XREF'.
+            lo_message->add_message_text_only(
+           EXPORTING
+             iv_msg_type               =  'E'                " Message Type - defined by GCS_MESSAGE_TYPE
+             iv_msg_text               =    CONV #( ls_data )  ).             " Message Text
+
+          ELSE.
+            lo_message->add_message_text_only(
+            EXPORTING
+              iv_msg_type               =  msgtype+0(1)              " Message Type - defined by GCS_MESSAGE_TYPE
+              iv_msg_text               =    CONV #( ls_data+2 )               " Message Text
+              iv_add_to_response_header = abap_true
+          ).
+          ENDIF.
+        ELSE.
+          IF lv_identifier = 'INCLU_EXCLU_MAT' OR  lv_identifier = 'VENDOR_MAT_XREF'.
+            lo_message->add_message_text_only(
+              EXPORTING
+                iv_msg_type               =  'E'                " Message Type - defined by GCS_MESSAGE_TYPE
+                iv_msg_text               =    CONV #( ls_data )               " Message Text
+
+            ).
+          ELSE.
+            lo_message->add_message_text_only(
+              EXPORTING
+                iv_msg_type               =  'E'                " Message Type - defined by GCS_MESSAGE_TYPE
+                iv_msg_text               =    CONV #( ls_data )               " Message Text
+                iv_add_to_response_header = abap_true
+            ).
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+
+    ELSE.
+      <lt_ok_data> = <lt_data>.
+    ENDIF.
+
+    "only valid records to be passed.
+    LOOP AT <lt_ok_data> ASSIGNING FIELD-SYMBOL(<ls_data>).
+      ASSIGN COMPONENT 'KEY' OF STRUCTURE <ls_data> TO FIELD-SYMBOL(<ls_key>).
+      <ls_key> = /bobf/cl_frw_factory=>get_new_key( ).
+
+    ENDLOOP.
+*    CONCATENATE ls_head-intf_class '=>sc_node-' ls_head-node INTO DATA(lv_nodid).
+*    ASSIGN (lv_nodid) to FIELD-SYMBOL(<ls_some>).
+    /scmtms/cl_mod_helper=>mod_create_multi(
+      EXPORTING
+        iv_node        =  ls_node-node_key              " Node
+        it_data        = <lt_ok_data>
+      CHANGING
+        ct_mod         =   lt_mod                 " Changes
+    ).
+
+    /bobf/cl_tra_serv_mgr_factory=>get_service_manager(   iv_bo_key = ls_bo-bo_key )->modify(
+      EXPORTING
+        it_modification =  lt_mod
+      IMPORTING
+        eo_message = DATA(lo_message1)  ).
+    IF lo_message1 IS BOUND.
+      lo_message1->get_messages(
+      EXPORTING
+        iv_severity = /bobf/cm_frw=>co_severity_error
+      IMPORTING
+        et_message  = DATA(lt_message) ).
+    ENDIF.
+    IF lt_message IS INITIAL.
+      /bobf/cl_tra_trans_mgr_factory=>get_transaction_manager( )->save(
+      IMPORTING
+         ev_rejected            =  DATA(lv_rejected)                                                                    " Interface for transaction change objects
+         eo_message             = lo_message1  ).
+      IF lo_message1 IS BOUND AND lv_rejected IS NOT INITIAL.
+        lo_message1->get_messages(
+       EXPORTING
+         iv_severity = /bobf/cm_frw=>co_severity_error
+       IMPORTING
+         et_message  = lt_message ).
+      ELSE.
+        ls_zcbofileupd_head-responsecode = 201.
+      ENDIF.
+    ENDIF.
+    DATA lv_resp_string TYPE string.
+*    data lt_soli type soli_tab.
+*    data ls_soli TYPE soli.
+    LOOP AT lt_message ASSIGNING FIELD-SYMBOL(<ls_message>).
+*      ls_soli = <ls_message>-message->get_text( )
+      ls_data = <ls_message>-message->get_text( ) .
+      msgtype = ls_data.
+      IF msgtype+1(1) =  '/' AND msgtype+0(1) CO 'SsWwEeIi'.
+        lo_message->add_message_text_only(
+        EXPORTING
+          iv_msg_type               =  msgtype+0(1)              " Message Type - defined by GCS_MESSAGE_TYPE
+          iv_msg_text               =    CONV #( ls_data+2 )               " Message Text
+          iv_add_to_response_header = abap_true
+      ).
+      ELSE.
+
+        lo_message->add_message_text_only(
+          EXPORTING
+            iv_msg_type               =  'E'                " Message Type - defined by GCS_MESSAGE_TYPE
+            iv_msg_text               =    CONV #( <ls_message>-message->get_text( ) )               " Message Text
+            iv_add_to_response_header = abap_true
+        ).
+      ENDIF.
+*      APPEND ls_soli to lt_soli.
+    ENDLOOP.
+*    LOOP AT LT_SOLI INTO ls_soli.
+*      CONCATENATE lv_resp_string cl_abap_char_utilities=>newline ls_soli into lv_resp_string.
+*    ENDLOOP.
+
+
+    "   ls_ZCBOFILEUPD_HEAD-response = lv_resp_string.
+    IF lv_identifier = 'INCLU_EXCLU_MAT' OR  lv_identifier = 'VENDOR_MAT_XREF'.
+      IF lo_message->get_messages( ) IS NOT INITIAL.
+        CREATE OBJECT lx_bus_ex
+          EXPORTING
+            message_container = lo_message.
+        RAISE EXCEPTION lx_bus_ex.
+      ENDIF.
+    ELSE.
+      ls_zcbofileupd_head-identifier = lv_filename.
+      ls_zcbofileupd_head-mediatype = 'application/xlsx'.
+      copy_data_to_ref(
+       EXPORTING
+         is_data = ls_zcbofileupd_head
+       CHANGING
+         cr_data = er_entity
+     ).
+    ENDIF.
+
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_ZOTC_CBO_MASS_FILE_DPC_EXT->GET_EXCEL_DATA
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_MAP_HEAD                    TYPE        ZCBOFILEUPD_HEAD
+* | [--->] IV_DOCUMENT_NAME               TYPE        STRING
+* | [--->] IS_MEDIA_RESOURCE              TYPE        /IWBEP/IF_MGW_APPL_TYPES=>TY_S_MEDIA_RESOURCE
+* | [--->] IV_ENTITY_NAME                 TYPE        STRING
+* | [<---] IT_TAB                         TYPE        TABLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_excel_data.
+    DATA: lo_excel_ref  TYPE REF TO cl_fdt_xl_spreadsheet,
+          lo_excel_core TYPE REF TO cx_fdt_excel_core,
+          lo_facade     TYPE REF TO /iwbep/if_mgw_dp_int_facade.
+
+    FIELD-SYMBOLS: <lt_data>   TYPE STANDARD TABLE,
+                   <lfs_data>  TYPE any,
+                   <lfs_field> TYPE any.
+    TRY.
+        lo_excel_ref = NEW cl_fdt_xl_spreadsheet(
+                                document_name = iv_document_name
+                                xdocument     = is_media_resource-value ).
+      CATCH cx_fdt_excel_core INTO lo_excel_core.
+
+*Error handling in case of excelsheet data processing
+        CALL METHOD lo_excel_core->if_message~get_text
+          RECEIVING
+            result = DATA(lv_msg).
+        RETURN.
+    ENDTRY .
+
+    "Get List of Worksheets.
+    lo_excel_ref->if_fdt_doc_spreadsheet~get_worksheet_names(
+      IMPORTING
+        worksheet_names = DATA(lt_worksheets) ).
+
+    IF NOT lt_worksheets IS INITIAL.
+      READ TABLE lt_worksheets INTO DATA(lv_woksheetname) INDEX 1.
+
+      DATA(lo_data_ref) = lo_excel_ref->if_fdt_doc_spreadsheet~get_itab_from_worksheet( lv_woksheetname ).
+      "Now you have excel work sheet data in dyanmic internal table
+      ASSIGN lo_data_ref->* TO <lt_data>.
+    ENDIF.
+
+
+    SELECT * FROM zcbofileupd_map INTO TABLE @DATA(lt_map)  WHERE identifier = @is_map_head-identifier.
+    DESCRIBE TABLE lt_map LINES DATA(lv_col_count).
+    IF <lt_data> IS ASSIGNED.
+      DELETE <lt_data> INDEX 1.
+      LOOP AT <lt_data> ASSIGNING <lfs_data> . "processing row
+        APPEND INITIAL LINE TO it_tab ASSIGNING FIELD-SYMBOL(<ls_data>).
+        DO lv_col_count TIMES.
+          ASSIGN COMPONENT sy-index OF STRUCTURE <lfs_data> TO FIELD-SYMBOL(<lfs_fval>) .
+          READ TABLE lt_map INTO DATA(ls_map) WITH KEY col_pos = sy-index.
+          IF sy-subrc = 0.
+            ASSIGN COMPONENT ls_map-techname OF STRUCTURE <ls_data> TO FIELD-SYMBOL(<lv_field>).
+            IF sy-subrc = 0.
+              IF ls_map-datattype = 'D' .
+                convert_date(
+                  EXPORTING
+                    im_date_ext = <lfs_fval>
+                  CHANGING
+                    ex_date_in  = <lv_field>                  " Field of type DATS
+                ).
+              ELSEIF ls_map-datattype = 'A' .
+                <lv_field> = |{ <lfs_fval> ALPHA = IN }|.
+              ELSE.
+                <lv_field> = <lfs_fval>.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+        ENDDO.
+
+      ENDLOOP.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Protected Method ZCL_ZOTC_CBO_MASS_FILE_DPC_EXT->ZCBOFILEUPD_HEAD_GET_ENTITY
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_ENTITY_NAME                 TYPE        STRING
+* | [--->] IV_ENTITY_SET_NAME             TYPE        STRING
+* | [--->] IV_SOURCE_NAME                 TYPE        STRING
+* | [--->] IT_KEY_TAB                     TYPE        /IWBEP/T_MGW_NAME_VALUE_PAIR
+* | [--->] IO_REQUEST_OBJECT              TYPE REF TO /IWBEP/IF_MGW_REQ_ENTITY(optional)
+* | [--->] IO_TECH_REQUEST_CONTEXT        TYPE REF TO /IWBEP/IF_MGW_REQ_ENTITY(optional)
+* | [--->] IT_NAVIGATION_PATH             TYPE        /IWBEP/T_MGW_NAVIGATION_PATH
+* | [<---] ER_ENTITY                      TYPE        ZCL_ZOTC_CBO_MASS_FILE_MPC=>TS_ZCBOFILEUPD_HEAD
+* | [<---] ES_RESPONSE_CONTEXT            TYPE        /IWBEP/IF_MGW_APPL_SRV_RUNTIME=>TY_S_MGW_RESPONSE_ENTITY_CNTXT
+* | [!CX!] /IWBEP/CX_MGW_BUSI_EXCEPTION
+* | [!CX!] /IWBEP/CX_MGW_TECH_EXCEPTION
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method ZCBOFILEUPD_HEAD_GET_ENTITY.
+
+   READ TABLE it_key_tab INTO data(ls_key) with key name = 'IDENTIFIER'.
+   SELECT SINGLE * FROM ZCBOFILEUPD_HEAD INTO @data(ls_cbofileupd_head) where identifier = @ls_key-value.
+   if sy-subrc = 0.
+     MOVE-CORRESPONDING ls_cbofileupd_head TO ER_ENTITY.
+   endif.
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Protected Method ZCL_ZOTC_CBO_MASS_FILE_DPC_EXT->ZCBOFILEUPD_MAPS_GET_ENTITYSET
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_ENTITY_NAME                 TYPE        STRING
+* | [--->] IV_ENTITY_SET_NAME             TYPE        STRING
+* | [--->] IV_SOURCE_NAME                 TYPE        STRING
+* | [--->] IT_FILTER_SELECT_OPTIONS       TYPE        /IWBEP/T_MGW_SELECT_OPTION
+* | [--->] IS_PAGING                      TYPE        /IWBEP/S_MGW_PAGING
+* | [--->] IT_KEY_TAB                     TYPE        /IWBEP/T_MGW_NAME_VALUE_PAIR
+* | [--->] IT_NAVIGATION_PATH             TYPE        /IWBEP/T_MGW_NAVIGATION_PATH
+* | [--->] IT_ORDER                       TYPE        /IWBEP/T_MGW_SORTING_ORDER
+* | [--->] IV_FILTER_STRING               TYPE        STRING
+* | [--->] IV_SEARCH_STRING               TYPE        STRING
+* | [--->] IO_TECH_REQUEST_CONTEXT        TYPE REF TO /IWBEP/IF_MGW_REQ_ENTITYSET(optional)
+* | [<---] ET_ENTITYSET                   TYPE        ZCL_ZOTC_CBO_MASS_FILE_MPC=>TT_ZCBOFILEUPD_MAP
+* | [<---] ES_RESPONSE_CONTEXT            TYPE        /IWBEP/IF_MGW_APPL_SRV_RUNTIME=>TY_S_MGW_RESPONSE_CONTEXT
+* | [!CX!] /IWBEP/CX_MGW_BUSI_EXCEPTION
+* | [!CX!] /IWBEP/CX_MGW_TECH_EXCEPTION
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method ZCBOFILEUPD_MAPS_GET_ENTITYSET.
+
+    READ TABLE IT_FILTER_SELECT_OPTIONS into data(ls_filter) with key property = 'IDENTIFIER' .
+    IF SY-subrc NE 0 .
+    READ TABLE IT_FILTER_SELECT_OPTIONS into ls_filter with key property = 'Identifier' .
+
+    ENDIF.
+    IF SY-SUBRC = 0.
+      data(identifier) = ls_filter-select_options[ 1 ]-low.
+    ENDIF.
+    SELECT * from ZCBOFILEUPD_MAP into TABLE @data(lt_map) WHERE identifier IN @ls_filter-select_options.
+    MOVE-CORRESPONDING lt_map TO ET_ENTITYSET .
+
+
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_ZOTC_CBO_MASS_FILE_DPC_EXT=>CONVERT_DATE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IM_DATE_EXT                    TYPE        DATA
+* | [<-->] EX_DATE_IN                     TYPE        DATS
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD convert_date.
+
+    DATA in_date TYPE TUMLS_DATE .
+    DATA: dateformat type TUMLS_DATE_FORMAT,
+     out_date TYPE TUMLS_DATE.
+    in_DATE =  im_date_ext.
+    FIND REGEX '^\d{4}[/|-]\d{1,2}[/|-]\d{1,2}$' IN in_DATE.
+    IF sy-subrc = 0.
+      dateformat = 'DYMD'.
+    ELSE.
+      " date format DD/MM/YYYY
+      FIND REGEX '^\d{1,2}[/|-]\d{1,2}[/|-]\d{4}$' IN in_date.
+      IF sy-subrc = 0.
+        dateformat = 'DDMY'.
+      ENDIF.
+    ENDIF.
+    CALL FUNCTION '/SAPDMC/LSM_DATE_CONVERT'
+      EXPORTING
+        date_in             = in_date
+        date_format_in      = dateformat
+        to_output_format    = ' '
+        to_internal_format  = 'X'
+      IMPORTING
+        date_out            = out_date
+      EXCEPTIONS
+        illegal_date        = 1
+        illegal_date_format = 2
+        no_user_date_format = 3
+        OTHERS              = 4.
+    IF sy-subrc = 0.
+     " <fs_comp>  = IM_DATE_EXT .
+      EX_DATE_IN = out_date.
+    ELSE.
+
+*        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+*                WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+  ENDMETHOD.
+ENDCLASS.
