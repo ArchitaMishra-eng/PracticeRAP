@@ -1,0 +1,169 @@
+*&---------------------------------------------------------------------*
+*& Report ZOTC_EDI856_STATUS_REPROCESS
+*----------------------------------------------------------------------*
+* Title          :EDI-856 Inbound Status and Reprocess program         *
+* Object ID      :I0083                                                *
+* Author         :Kiran Reddy Revuri                                   *
+* Date           :01/25/2025                                           *
+*----------------------------------------------------------------------*
+* Program Purpose: Program will display the status of teh EDI-856 Inb.
+*                  Interfaces and provide an option to reprocess the
+*                  errors
+*----------------------------------------------------------------------*
+REPORT zotc_edi856_status_reprocess MESSAGE-ID zotc_i0083_logs.
+DATA:
+  gv_date     TYPE sydatum,
+  gv_delivery TYPE likp-vbeln,
+  gv_status   TYPE zz1_status-status.
+
+SELECTION-SCREEN: BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-s01.
+  SELECT-OPTIONS:
+  s_date FOR gv_date ,
+  s_delv FOR gv_delivery,
+  s_status FOR gv_status NO INTERVALS.
+  PARAMETERS p_tech_e TYPE xfeld AS CHECKBOX.
+SELECTION-SCREEN: END OF BLOCK b1.
+
+
+*----------------------------------------------------------------------*
+*       CLASS lcl_sflight DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS lcl_report DEFINITION.
+
+  PUBLIC SECTION.
+    METHODS: get_data,
+      build_fieldcatlog,  "added <DE2K929604> by ATIFA on 02/17/2025
+      auth_check,
+      display_alv.
+
+    DATA: t_report TYPE STANDARD TABLE OF zz1_status,
+          t_fcat   TYPE lvc_t_fcat,
+          s_layout TYPE lvc_s_layo.
+
+ENDCLASS.                    "lcl_report DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS lcl_report IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS lcl_report IMPLEMENTATION.
+
+* Get REPORT data
+  METHOD get_data.
+    DATA: r_tech_error TYPE RANGE OF zz1_status-tech_error.
+    " If technical errors is selected, the select only technical errors
+    IF p_tech_e IS NOT INITIAL.
+      APPEND VALUE #( sign = 'I' option = 'EQ'  low = p_tech_e ) TO r_tech_error.
+    ELSE.
+      CLEAR r_tech_error[].
+    ENDIF.
+
+    SELECT * INTO TABLE me->t_report
+                    FROM zz1_status
+                    WHERE upd_date IN s_date AND
+                          delivery IN s_delv AND
+                          status IN s_status AND
+                          tech_error IN r_tech_error[].
+  ENDMETHOD.                    "get_data
+
+* Build FieldCatlog
+  METHOD build_fieldcatlog.
+    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+      EXPORTING
+        i_structure_name       = 'ZZ1_STATUS'
+      CHANGING
+        ct_fieldcat            = t_fcat
+      EXCEPTIONS
+        inconsistent_interface = 1
+        program_error          = 2
+        OTHERS                 = 3.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+  ENDMETHOD.                    "build_fieldcatlog
+
+* Display ALV
+  METHOD display_alv.
+    CALL SCREEN 100.
+  ENDMETHOD.                    "display
+
+  METHOD auth_check.
+    AUTHORITY-CHECK OBJECT 'S_TCODE'
+                        ID 'TCD'
+                     FIELD 'ZEDI856STATUS'.
+    IF sy-subrc <> 0.
+      MESSAGE e021.
+    ENDIF.
+
+    AUTHORITY-CHECK OBJECT 'ZEDI856'
+                        ID 'ACTVT'
+                     FIELD '03'.
+    IF sy-subrc <> 0.
+      MESSAGE e021.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.                    "lcl_report IMPLEMENTATION
+
+
+DATA: go_report        TYPE REF TO lcl_report,
+      go_container_100 TYPE REF TO cl_gui_custom_container,
+      go_grid          TYPE REF TO cl_gui_alv_grid.
+
+INITIALIZATION.
+* Create instance for the local class
+  CREATE OBJECT go_report.
+* Check authority
+  go_report->auth_check( ).
+
+START-OF-SELECTION.
+
+* Get the REPORT table data
+  go_report->get_data( ).
+
+  " In case of no errors to be displayed, give an message
+  IF go_report->t_report IS INITIAL .
+    MESSAGE i022.
+    EXIT.
+  ENDIF.
+
+* 1. Create container instance
+  CREATE OBJECT go_container_100
+    EXPORTING
+      container_name = 'ALV'.
+
+* 2. Create ALV grid instance by using the container instance
+  CREATE OBJECT go_grid
+    EXPORTING
+      i_parent = go_container_100.
+
+* 3. Build Field Catlog
+  go_report->build_fieldcatlog( ).
+
+  go_report->s_layout-sel_mode   = 'D'.
+  go_report->s_layout-zebra      = abap_true.
+  go_report->s_layout-cwidth_opt = abap_true.
+
+* 4. Call the ALV
+  CALL METHOD go_grid->set_table_for_first_display
+    EXPORTING
+      is_layout                     = go_report->s_layout
+    CHANGING
+      it_outtab                     = go_report->t_report
+      it_fieldcatalog               = go_report->t_fcat
+    EXCEPTIONS
+      invalid_parameter_combination = 1
+      program_error                 = 2
+      too_many_lines                = 3
+      OTHERS                        = 4.
+  IF sy-subrc <> 0.
+    MESSAGE i016.
+  ELSE.
+* Display the ALV
+    go_report->display_alv( ).
+  ENDIF.
+
+  INCLUDE zotc_edi856_status_reproc_f01.
