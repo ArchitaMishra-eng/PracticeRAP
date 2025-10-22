@@ -1,354 +1,109 @@
-*----------------------------------------------------------------------*
-* Title          :EWM Delivery Qty Adjust & Stock Type Change          *
-* Object ID      :E1216 & E1206                                        *
-* Author         :ROYR2                                                *
-* Date           :04/18/2025                                           *
-* Release        :CIP-3.2 & CIP-3.3                                    *
-*----------------------------------------------------------------------*
-***@TECHNICALDOCUMENTATION                                             *
-* Program Purpose: Adjusts EWM Delivery Qty & block stock type         *
-*----------------------------------------------------------------------*
-* Modification History                                                 *
-* Request#     Developer      Date         Description                 *
-* DE2K929958   ROYR2          04/18/2025   Initial Build               *
-*----------------------------------------------------------------------*
-*&---------------------------------------------------------------------*
-*& ZFM_EWM_DELIVERY_QTY_ADJ                                            *
-*&---------------------------------------------------------------------*
-*&
-*&---------------------------------------------------------------------*
-FUNCTION zfm_ewm_delivery_qty_adj.
+FUNCTION z_edi856_pgicheck_fm.
 *"----------------------------------------------------------------------
 *"*"Local Interface:
 *"  IMPORTING
-*"     VALUE(IM_DOCNO) TYPE  /SCWM/DE_DOCID OPTIONAL
-*"     VALUE(IM_DOCITM) TYPE  /SCWM/DE_ITMID OPTIONAL
-*"     VALUE(IM_DELBLOCK) TYPE  /SCDL/DB_PRCODES-PRCODE DEFAULT 'Z6'
-*"     VALUE(IM_QTYADJUST) TYPE  /SCWM/DE_UI_QUAN OPTIONAL
-*"     VALUE(IM_LGNUM) TYPE  /SCWM/LGNUM DEFAULT 'WR01'
-*"     VALUE(IM_WT) TYPE  /SCWM/LTAP OPTIONAL
-*"     VALUE(IM_BINB) TYPE  /SCWM/DE_CAT OPTIONAL
-*"     VALUE(IM_DOCCAT) TYPE  /SCWM/DE_DOCCAT OPTIONAL
+*"     REFERENCE(OBJTYPE) LIKE  SWETYPECOU-OBJTYPE
+*"     REFERENCE(OBJKEY) LIKE  SWEINSTCOU-OBJKEY
+*"     REFERENCE(EVENT) LIKE  SWETYPECOU-EVENT
+*"     REFERENCE(RECTYPE) LIKE  SWETYPECOU-RECTYPE
 *"  TABLES
-*"      IT_DOCDET STRUCTURE  /SCDL/DB_PROCI_O OPTIONAL
-*"      IT_VBAP STRUCTURE  VBAP OPTIONAL
+*"      EVENT_CONTAINER STRUCTURE  SWCONT
+*"  EXCEPTIONS
+*"      ANY_EXCEPTION
 *"----------------------------------------------------------------------
+  CONSTANTS : lc_i0911_likp_kunnr_shipto TYPE string VALUE 'I0911_LIKP_KUNNR_SHIPTO',
+              lc_i0911_likp_gbstk_status TYPE string VALUE 'I0911_LIKP_GBSTK_STATUS',
+              lc_i0911_plant             TYPE string VALUE 'PLANT_I0911',
+              c_subobject                TYPE balsubobj VALUE 'I0911',
+              c_fm                       TYPE rs38l_fnam VALUE 'Z_EDI856_PGICHECK_FM'.
 
-  CONSTANTS: lc_subobj_e1216 TYPE balsubobj VALUE 'E1216',
-             lc_subobj_e1206 TYPE balsubobj VALUE 'E1206'.
+  DATA : lo_obj TYPE REF TO zcl_event_mesh_util,
+         lv_txt TYPE string.
 
-  DATA : lo_obj  TYPE REF TO zcl_event_mesh_util,
-         lv_txt  TYPE string,
-         lv_quan TYPE /scwm/de_ui_quan.
-
-  DATA: ls_post_header TYPE /scwm/s_gmheader,
-        ls_post_item   TYPE /scwm/s_spitem.
-
-  DATA pt_data TYPE /scdl/db_proci_o OCCURS 0.
-  DATA: ls_data TYPE /scdl/db_proci_o.
-  DATA: mo_application_log TYPE REF TO zcl_app_log_handler.
-
-  DATA:
-    lo_sp                   TYPE REF TO /scdl/cl_sp_prd_out,
-    lo_message_box          TYPE REF TO /scdl/cl_sp_message_box,
-    ls_action               TYPE /scdl/s_sp_act_action,
-    lt_a_head               TYPE /scdl/t_sp_a_head,
-    lt_a_head_incoterms_out TYPE /scdl/t_sp_a_head_incoterms,
-    lt_a_head_incoterms     TYPE /scdl/t_sp_a_head_incoterms,
-    ls_a_head_incoterms     TYPE /scdl/s_sp_a_head_incoterms,
-    lt_a_item               TYPE /scdl/t_sp_a_item,
-    lv_rejected             TYPE boole_d,
-    lt_return_codes         TYPE /scdl/t_sp_return_code,
-    lt_messages             TYPE /scdl/dm_message_tab,
-    ls_prcode               TYPE /scwm/dlv_prcode_add_str,
-    lt_k_item               TYPE /scdl/t_sp_k_item,
-    wa_k_item               LIKE LINE OF lt_k_item,
-    lv_error                TYPE char1.
-
-  DATA: it_item     TYPE /scwm/tt_spitem,
-        is_item     TYPE /scwm/s_spitem,
-        lt_bapiret  TYPE bapiret2_t,
-        lv_severity TYPE bapi_mtype,
-        is_quan     TYPE /scwm/s_quan,
-        lv_cat      TYPE /lime/stock_category.
-
-  DATA: ls_sp_k_head   TYPE /scdl/s_sp_k_head,
-        lt_sp_k_head   TYPE /scdl/t_sp_k_head,
-        ls_prcodes_in  TYPE /scdl/s_sp_a_item_prcodes,
-        lt_prcodes_in  TYPE /scdl/t_sp_a_item_prcodes,
-        lt_prcodes_out TYPE /scdl/t_sp_a_item_prcodes,
-        lt_doc         TYPE STANDARD TABLE OF /scdl/db_proci_o,
-        ls_doc         TYPE /scdl/db_proci_o.
-
-  DATA: lv_so_vbeln_n TYPE numc10,
-        lv_so_vbeln   TYPE vbap-vbeln,
-        lv_so_posnr   TYPE vbap-posnr,
-        lv_so_posnr_c TYPE char10,
-        lv_og_quan    TYPE /scwm/de_ui_quan,
-        lv_conf_q     TYPE /scwm/de_ui_quan,
-        lv_ded_rfui   TYPE /scwm/de_ui_quan.
-
-  DATA : oref              TYPE REF TO /scwm/cl_dlv_management_prd,
-         lt_od_creation    TYPE /scwm/dlv_od_create_tab,
-         ls_od_creation    LIKE LINE OF  lt_od_creation,
-         lo_message_tmp    TYPE REF TO /scwm/cl_dm_message_no,
-         lt_od_created_out TYPE /scwm/dlv_item_out_fd_tab,
-         ls_items          TYPE LINE OF /scwm/dlv_itemid_tab.
-
-  DATA: pv_error(1) TYPE c,
-        lv_itm      TYPE /scdl/dl_itemno.
-
-  CONSTANTS: lc_pdo TYPE /scdl/db_proci_o-doccat VALUE 'PDO'.
-
-  DATA: ls_order_header_in  TYPE bapisdh1,
-        ls_order_header_inx TYPE bapisdh1x,
-        lt_order_item_in    TYPE STANDARD TABLE OF bapisditm,
-        lt_order_item_inx   TYPE STANDARD TABLE OF bapisditmx,
-        lt_schedule_lines   TYPE STANDARD TABLE OF bapischdl,
-        lt_schedule_linesx  TYPE STANDARD TABLE OF bapischdlx,
-        lt_return           TYPE STANDARD TABLE OF bapiret2.
-
-  FIELD-SYMBOLS: <ls_prcodes_in> TYPE /scdl/s_sp_a_item_prcodes.
-  FIELD-SYMBOLS: <fs_action_control>.
-
-  BREAK palb .
-
-  /scwm/cl_tm=>cleanup( ).
-  /scwm/cl_tm=>set_lgnum( iv_lgnum = im_lgnum ).
-
-  "Creation of action codes
-  ls_action-action_code = /scwm/if_dl_c=>sc_ac_prcode_add.
-  CREATE DATA ls_action-action_control TYPE /scwm/dlv_prcode_add_str.
-
-  CLEAR pv_error.
-
-  TRY.
-      CREATE OBJECT lo_message_box.
-      CREATE OBJECT lo_sp
-        EXPORTING
-          io_message_box = lo_message_box
-          iv_doccat      = /scdl/if_dl_doc_c=>sc_doccat_out_prd
-          iv_mode        = /scdl/cl_sp=>sc_mode_classic.
-
-    CATCH /scdl/cx_sp_message_box.
-      pv_error = 'X'.
-      EXIT.
-  ENDTRY.
-
-  DATA(lt_docdet1) = it_docdet[].
-
-  "This gets executed from WRICEF E1206 - During Wave Release
-  IF it_docdet[] IS NOT INITIAL.
-    SELECT docid, itemid, qty, uom, docno, itemno
-      FROM /scdl/db_proci_o
-      INTO TABLE @DATA(lt_prcodes_tmp)
-      FOR ALL ENTRIES IN @lt_docdet1
-      WHERE doccat = @lc_pdo            AND
-            docid  = @lt_docdet1-docid  AND
-            itemid = @lt_docdet1-itemid AND
-            qty    GT 0.
-    IF sy-subrc NE 0.
-      EXIT.
-    ENDIF.
-    "This gets executed from WRICEF E1216 - During RFUI Picking
-  ELSE.
-    SELECT docid, itemid, qty, uom, docno, itemno
-      FROM /scdl/db_proci_o
-      INTO TABLE @lt_prcodes_tmp
-      WHERE doccat = @lc_pdo    AND
-            docid  = @im_docno  AND
-            itemid = @im_docitm AND
-            qty    GT 0.
-    IF sy-subrc NE 0.
-      EXIT.
-    ENDIF.
-    "Setting up a flag for E1216 --> "Whenever they get processed from /SCWM/RFUI
-    DATA(lv_rfui_flag) = abap_true.
-  ENDIF.
-
-  IF lt_prcodes_tmp IS NOT INITIAL.
-    READ TABLE lt_prcodes_tmp INTO DATA(ls_prcodes_rd) INDEX 1.
-    IF sy-subrc = 0.
-      DATA(lv_vbeln) = ls_prcodes_rd-docno.
-      DATA(lv_posnr) = ls_prcodes_rd-itemno.
-      SHIFT: lv_vbeln LEFT DELETING LEADING '0',
-             lv_posnr LEFT DELETING LEADING '0'.
-    ENDIF.
-    LOOP AT lt_prcodes_tmp INTO ls_prcodes_rd.
-      MOVE-CORRESPONDING: ls_prcodes_rd TO ls_prcodes_in,
-                          ls_prcodes_rd TO wa_k_item.
-      APPEND: ls_prcodes_in TO lt_prcodes_in,
-              wa_k_item     TO lt_k_item.
-      CLEAR: ls_prcodes_rd, ls_prcodes_in.
-    ENDLOOP.
-  ENDIF.
-
-  "E1216 Log
-  IF lv_rfui_flag IS NOT INITIAL.
-    "SLG1 Logging
-    mo_application_log = NEW zcl_app_log_handler( iv_obj             = 'ZOTC'                        "Log Object
-                                                  iv_extend_number   = CONV #( lv_vbeln )  "External ID
-                                                  iv_subobj          = lc_subobj_e1216            "Sub Object
-                                                  iv_calling_program = sy-repid ).
-    "E1206 Log
-  ELSE.
-    "SLG1 Logging
-    mo_application_log = NEW zcl_app_log_handler( iv_obj             = 'ZOTC'                        "Log Object
-                                                  iv_extend_number   = CONV #( lv_vbeln )  "External ID
-                                                  iv_subobj          = lc_subobj_e1206            "Sub Object
-                                                  iv_calling_program = sy-repid ).
-  ENDIF.
-
-  MESSAGE i013(zmsg) INTO DATA(lv_msg) WITH 'Start of EWM Del Qty Adjustment: ' lv_vbeln sy-datum sy-uzeit.
-  mo_application_log->add_sys_message( ).
-
-
-* Lock the ODO
-  READ TABLE lt_prcodes_in INTO ls_prcodes_in INDEX 1.
-  IF sy-subrc = 0.
-    ls_sp_k_head-docid = ls_prcodes_in-docid.
-    APPEND ls_sp_k_head TO lt_sp_k_head.
-  ENDIF.
-  CLEAR: lt_return_codes, lv_rejected.
-
-  "Selecting the appropriate EWM Del Details
-  lo_sp->/scdl/if_sp1_aspect~select(
+  DATA : lv_kunnr TYPE likp-kunnr,
+         lv_gbstk TYPE likp-gbstk,
+         lv_plant TYPE likp-werks.
+*---------------------------End Of Declaration-----------------------------------------------------------------
+  " Log Success / Error messages to SLG1
+  lo_obj =  NEW zcl_event_mesh_util( im_subobject = c_subobject
+                                      im_objkey    = CONV #( objkey ) ).
+  " Begin of processing FM
+  lo_obj->begin_process_log(
     EXPORTING
-      inkeys       = lt_sp_k_head
-      aspect       = /scdl/if_sp_c=>sc_asp_head
-    IMPORTING
-      outrecords   = lt_a_head
-      rejected     = lv_rejected
-      return_codes = lt_return_codes ).
-  CLEAR lv_rejected.
-  REFRESH lt_return_codes.
+      im_fm      =  c_fm
+      im_objtype =  objtype
+      im_event   =  event   ).
 
-  "Check if delivery is locked for processing
-  lo_sp->lock(
-    EXPORTING
-      inkeys       = lt_sp_k_head
-      aspect       = /scdl/if_sp_c=>sc_asp_head
-      lockmode     = /scdl/if_sp1_locking=>sc_exclusive_lock
-    IMPORTING
-      rejected     = lv_rejected
-      return_codes = lt_return_codes ).
-  READ TABLE lt_return_codes TRANSPORTING NO FIELDS WITH KEY failed = abap_true.
-  IF sy-subrc = 0 OR lv_rejected = abap_true.
-    pv_error = abap_true.
-    MESSAGE e013(zmsg) INTO lv_msg WITH 'EWM Delivery is locked' lv_vbeln sy-datum sy-uzeit.
-    mo_application_log->add_sys_message( ).
-    mo_application_log->save( ).
-    COMMIT WORK.
-    EXIT.
-  ENDIF.
+  " ** number range to get current catalogue number
+  SELECT name,
+         low
+    FROM zz1_constantvaluetable
+      INTO TABLE @DATA(lt_constantvalue)
+    WHERE name = @lc_i0911_likp_kunnr_shipto
+        OR name = @lc_i0911_likp_gbstk_status.
 
-* Add the process code(s) and update the new quantity!
-  DATA: lv_qty TYPE /scdl/dl_quantity.
-  DATA: lv_org_qty TYPE /scdl/dl_quantity.
-  DATA: lv_abs_qty TYPE /scdl/dl_quantity.
+  IF lt_constantvalue IS NOT INITIAL.
 
-  LOOP AT lt_prcodes_in ASSIGNING <ls_prcodes_in>.
-    lv_org_qty = <ls_prcodes_in>-qty .
-    lv_qty = 0.
-    <ls_prcodes_in>-prcode = im_delblock.
-    IF it_docdet[] IS NOT INITIAL.
-      READ TABLE it_docdet[] INTO DATA(ls_docdet) WITH KEY docid  = <ls_prcodes_in>-docid
-                                                         itemid = <ls_prcodes_in>-itemid.
-      IF sy-subrc = 0 AND ls_docdet-itemcat IS NOT INITIAL.
-        <ls_prcodes_in>-prcode = ls_docdet-itemcat.
-      ENDIF.
-    ENDIF.
-    SELECT SUM( qty ) AS qty INTO lv_qty
-    FROM /scdl/db_prcodes
-    WHERE docid = <ls_prcodes_in>-docid
-    AND itemid = <ls_prcodes_in>-itemid
-    AND prcode = im_delblock.
-    IF lv_qty > 0.
-      <ls_prcodes_in>-qty = lv_qty + im_qtyadjust - <ls_prcodes_in>-qty .
-    ELSE.
-      <ls_prcodes_in>-qty = im_qtyadjust - <ls_prcodes_in>-qty.
-    ENDIF.
-  ENDLOOP.
+    SELECT name,
+         low
+    FROM zz1_constantvaluetable
+      INTO TABLE @DATA(lt_plant)
+    WHERE name = @lc_i0911_plant.
 
-  "Update with process code/delivery block
-  CLEAR: lt_return_codes, lv_rejected.
-  lo_sp->update(
-    EXPORTING
-      inrecords    = lt_prcodes_in
-      aspect       = /scdl/if_sp_c=>sc_asp_item_prcodes
-    IMPORTING
-      outrecords   = lt_prcodes_out
-      rejected     = lv_rejected
-      return_codes = lt_return_codes ).
-  READ TABLE lt_return_codes TRANSPORTING NO FIELDS WITH KEY failed = abap_true.
-  IF sy-subrc = 0 OR lv_rejected = abap_true.
-    pv_error = abap_true.
-    MESSAGE e013(zmsg) INTO lv_msg WITH 'EWM Delivery update failed' lv_vbeln sy-datum  sy-uzeit." lv_posnr.
-    mo_application_log->add_sys_message( ).
-    mo_application_log->save( ).
-    COMMIT WORK.
-    EXIT.
-  ENDIF.
 
-* Save the data (we still need a commit, but that will happen all or none at the end)
-  lo_sp->save( IMPORTING rejected = lv_rejected ).
-  IF lv_rejected = abap_true.
-    MESSAGE e013(zmsg) INTO lv_msg WITH 'EWM Delivery couldnt be saved' lv_vbeln sy-datum  sy-uzeit. "lv_posnr.
-    mo_application_log->add_sys_message( ).
-    mo_application_log->save( ).
-    COMMIT WORK.
-    /scwm/cl_tm=>cleanup( ).
-    pv_error = abap_true.
+    lv_kunnr = VALUE #( lt_constantvalue[ name = lc_i0911_likp_kunnr_shipto ]-low OPTIONAL ).
+    lv_gbstk = VALUE #( lt_constantvalue[ name = lc_i0911_likp_gbstk_status ]-low OPTIONAL ).
+    lv_plant = VALUE #( lt_plant[ name = lc_i0911_plant ]-low OPTIONAL ).
+
+    SELECT SINGLE
+      vbeln,
+      kunnr,
+      gbstk,
+      werks
+    FROM likp WHERE  vbeln = @objkey AND kunnr = @lv_kunnr AND  gbstk = @lv_gbstk INTO @DATA(ls_data).
   ELSE.
-    MESSAGE s013(zmsg) INTO lv_msg WITH 'EWM Delivery has been changed' lv_vbeln sy-datum sy-uzeit. "lv_posnr.
-    mo_application_log->add_sys_message( ).
-    IF lv_rfui_flag IS INITIAL.
-      mo_application_log->save( ).
-    ENDIF.
-    mo_application_log->save( ).
-    COMMIT WORK. "- if this commit work not there it will not update the delivery with the qty and picking status.
-    "Clean Up EWM Global Parameters
-    /scwm/cl_tm=>cleanup( )."- if this clean up not done - it will error another instance available while creating OD.
-
-    "Stock type change code - only for E1216 /SCWM/RFUI
-    IF lv_rfui_flag IS NOT INITIAL.
-      im_wt-rdocid = im_docno.
-      im_wt-ritmid = im_docitm.
-      im_wt-cat    = im_binb.
-      zcl_chg_stocktype=>change_stocktype(
-        EXPORTING
-          ls_item    = im_wt
-        IMPORTING
-          et_bapiret = lt_bapiret
-          ex_error   = lv_error
-      ).
-    ENDIF.
-  ENDIF.
-
-  "Start of addition - ROYR2, INC4076831, Overpicking Issue
-  IF im_qtyadjust IS INITIAL. "IM_QTYADJUST = 0 means 0 pick happened from /SCWM/RFUI (BIDF) or Wave Release
-    ls_od_creation-docid              =  lt_prcodes_in[ 1 ]-docid .
-    LOOP AT lt_prcodes_in INTO DATA(str_prcodes_in) .
-      ls_items-itemid                   =  str_prcodes_in-itemid.
-      APPEND ls_items TO  ls_od_creation-items .
-    ENDLOOP .
-    ls_od_creation-doccat             =  'PDO'  .
-    APPEND  ls_od_creation TO lt_od_creation .
-
-
-    CREATE OBJECT oref.
-    CALL METHOD oref->create_od
+    lv_txt = TEXT-001. " No Constants maintained for Variables 'I0911_LIKP_KUNNR_SHIPTO','I0911_LIKP_GBSTK_STATUS'
+    lo_obj->add_msg(
       EXPORTING
-        iv_whno             = im_lgnum
-        iv_parallel_booking = abap_true
-        it_od_creation      = lt_od_creation
-      IMPORTING
-        eo_message          = lo_message_tmp
-        et_od_created       = lt_od_created_out.
-    "Clean Up EWM Global Parameters
-    /scwm/cl_tm=>cleanup( ).
+        iv_text  = lv_txt
+        iv_msgty =  'E'
+    ).
+    DATA(lv_event_suppress) = abap_true.
 
   ENDIF.
 
-  "End   of addition - ROYR2, INC4076831, Overpicking Issue
+  IF  ls_data IS NOT INITIAL AND ls_data-werks EQ lv_plant.
+  ELSE.
+    lv_txt = TEXT-002. " No prcessing status maintained for Customer
+    lo_obj->add_msg(
+      EXPORTING
+        iv_text  = lv_txt
+        iv_msgty =  'E'
+    ).
+    lv_event_suppress = abap_true.
+*    RAISE any_exception .
+    IF lv_event_suppress = abap_true.
+      " Store msg in SLG1 for event suppress
+      lo_obj->event_suppressed_by_check_fm( ).
+      lo_obj->end_procss_logs(
+      EXPORTING
+        im_fm      =  c_fm
+        im_objtype =  objtype
+        im_event   =  event ).
+      " Save the log
+      lo_obj->save_logs( ).
+      RAISE exception.
+    ELSE.
+      " Store msg in SLG1 for event trigger is passed to Queue
+      lo_obj->event_passed_to_queue( ).
+      " End of processing FM
+      lo_obj->end_procss_logs(
+      EXPORTING
+        im_fm      =  c_fm
+        im_objtype =  objtype
+        im_event   =  event ).
+      lo_obj->save_logs( ).
+    ENDIF.
+  ENDIF.
+
 ENDFUNCTION.
