@@ -1,0 +1,162 @@
+CLASS zcl_event_mesh_util DEFINITION
+  PUBLIC
+  CREATE PUBLIC .
+
+  PUBLIC SECTION.
+
+    CONSTANTS gv_object TYPE balobj_d VALUE 'ZEVENT_MESH' ##NO_TEXT.
+    DATA gr_obj TYPE REF TO zcl_app_log_handler .
+    DATA gv_objectkey TYPE swo_typeid .
+    CLASS-DATA gr_latam_country TYPE RANGE OF land1.
+
+    METHODS constructor
+      IMPORTING
+        !im_subobject TYPE balsubobj
+        !im_objkey    TYPE swo_typeid .
+    METHODS begin_process_log
+      IMPORTING
+        !im_fm      TYPE rs38l_fnam
+        !im_objtype TYPE swo_objtyp OPTIONAL
+        !im_event   TYPE swo_event OPTIONAL .
+    METHODS end_procss_logs
+      IMPORTING
+        !im_fm      TYPE rs38l_fnam
+        !im_objtype TYPE swo_objtyp OPTIONAL
+        !im_event   TYPE swo_event OPTIONAL .
+    METHODS event_suppressed_by_check_fm .
+    METHODS event_passed_to_queue .
+    METHODS add_msg
+      IMPORTING
+        !iv_text  TYPE string
+        !iv_msgty TYPE symsgty .
+    METHODS save_logs .
+    METHODS add_sys_message .
+protected section.
+private section.
+
+  data GV_FM type RS38L_FNAM .
+ENDCLASS.
+
+
+
+CLASS ZCL_EVENT_MESH_UTIL IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_EVENT_MESH_UTIL->ADD_MSG
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_TEXT                        TYPE        STRING
+* | [--->] IV_MSGTY                       TYPE        SYMSGTY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD add_msg.
+    gr_obj->add_text(
+     EXPORTING
+       iv_text     = iv_text
+       iv_msgty    = iv_msgty            " Message Type
+   ).
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_EVENT_MESH_UTIL->ADD_SYS_MESSAGE
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method ADD_SYS_MESSAGE.
+    gr_obj->add_sys_message( ).
+
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_EVENT_MESH_UTIL->BEGIN_PROCESS_LOG
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IM_FM                          TYPE        RS38L_FNAM
+* | [--->] IM_OBJTYPE                     TYPE        SWO_OBJTYP(optional)
+* | [--->] IM_EVENT                       TYPE        SWO_EVENT(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD begin_process_log.
+
+    DATA(txt) = | Start of Processing FM- { im_fm } for Object { im_objtype } Event { im_event } Objectkey { gv_objectkey } |.
+    gr_obj->add_text(
+      EXPORTING
+        iv_text     = txt
+        iv_msgty    = 'S'              " Message Type
+    ).
+    gv_fm = im_fm.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_EVENT_MESH_UTIL->CONSTRUCTOR
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IM_SUBOBJECT                   TYPE        BALSUBOBJ
+* | [--->] IM_OBJKEY                      TYPE        SWO_TYPEID
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD constructor.
+    TRY.
+        gr_obj = NEW zcl_app_log_handler( iv_obj = gv_object   "Log Object
+                                          iv_extend_number = CONV #( im_objkey )  "External ID
+                                          iv_subobj = im_subobject "Sub Object
+                                          iv_calling_program = sy-repid   ).
+
+        gv_objectkey = im_objkey.
+      CATCH cx_root.
+    ENDTRY.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_EVENT_MESH_UTIL->END_PROCSS_LOGS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IM_FM                          TYPE        RS38L_FNAM
+* | [--->] IM_OBJTYPE                     TYPE        SWO_OBJTYP(optional)
+* | [--->] IM_EVENT                       TYPE        SWO_EVENT(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method END_PROCSS_LOGS.
+     DATA(txt) = | End of Processing FM- { im_fm } for Object { im_objtype } Event { im_event } Objectkey { gv_objectkey } |.
+    GR_OBJ->add_text(
+      EXPORTING
+        iv_text     = txt
+        iv_msgty    = 'S'              " Message Type
+    ).
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_EVENT_MESH_UTIL->EVENT_PASSED_TO_QUEUE
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method EVENT_PASSED_TO_QUEUE.
+     DATA(txt) = | Event passed to Queue |.
+    GR_OBJ->add_text(
+      EXPORTING
+        iv_text     = txt
+        iv_msgty    = 'S'              " Message Type
+    ).
+
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_EVENT_MESH_UTIL->EVENT_SUPPRESSED_BY_CHECK_FM
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method EVENT_SUPPRESSED_BY_CHECK_FM.
+
+      DATA(txt) = | Event suppressed by FM- { gv_fm } with the Objectkey { gv_objectkey } |.
+    GR_OBJ->add_text(
+      EXPORTING
+        iv_text     = txt
+        iv_msgty    = 'E'              " Message Type
+    ).
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_EVENT_MESH_UTIL->SAVE_LOGS
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD save_logs.
+    gr_obj->save( ).
+  ENDMETHOD.
+ENDCLASS.
