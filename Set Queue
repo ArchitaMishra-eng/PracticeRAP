@@ -1,0 +1,49 @@
+*----------------------------------------------------------------------*
+* Title          : Update EWM ODB Qty during batch failure/GTS block   *
+* Object ID      : E1206                                               *
+* Author         : ROYR2                                               *
+* Date           : 04/07/2025                                          *
+* Release        : CIP - Release 9                                     *
+*----------------------------------------------------------------------*
+* Program Purpose: This enhancement is to record         Wave release  *
+*  log to custom table                                                 *
+*                                                                      *
+*----------------------------------------------------------------------*
+* Modification History                                                 *
+* Request#    Developer    Date         Description                    *
+* DE2K929958  ROYR2       04/07/2025    Recording Wave Number          *
+*----------------------------------------------------------------------*
+  METHOD ewm_del_adjust.
+    CONSTANTS: lc_e1206 TYPE char10 VALUE 'E1206'.
+    DATA: lv_queuename TYPE trfcqnam.
+    IF gt_waves IS NOT INITIAL.
+      DELETE gt_waves WHERE charg NE abap_true.
+      IF gt_waves IS NOT INITIAL.
+        lv_queuename = lc_e1206.
+        LOOP AT gt_waves INTO DATA(ls_wavs).
+          DATA(lv_wave)     = ls_wavs-wave.
+          SHIFT lv_wave     LEFT DELETING LEADING '0'.
+          CONCATENATE lv_queuename lv_wave INTO lv_queuename.
+          CONDENSE lv_queuename.
+          IF strlen( lv_queuename ) GE 24. "Queuename datatype length is 24
+            EXIT.
+          ENDIF.
+        ENDLOOP.
+        CALL FUNCTION 'TRFC_SET_QUEUE_NAME'
+          EXPORTING
+            qname              = lv_queuename
+          EXCEPTIONS
+            invalid_queue_name = 1
+            OTHERS             = 2.
+        IF sy-subrc <> 0.
+          "Implement suitable error handling here
+        ELSE.
+          CALL FUNCTION 'ZFM_EWM_WAVE_RELEASE_ADJ' IN BACKGROUND TASK
+            AS SEPARATE UNIT DESTINATION 'NONE'
+            TABLES
+              it_waveitem = gt_waves.
+        ENDIF.
+        CLEAR: gt_waves.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
