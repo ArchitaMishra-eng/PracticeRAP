@@ -1,0 +1,174 @@
+*----------------------------------------------------------------------*
+***INCLUDE ZOTC_EDI856_STATUS_REPROC_F01.
+*----------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  USER_COMMAND_0100  INPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE user_command_0100 INPUT.
+  DATA user_command TYPE syucomm.
+
+  CASE sy-ucomm.
+    WHEN 'BACK'.
+      LEAVE TO SCREEN 0.
+    WHEN 'REPROCESS'.
+      PERFORM reprocess_edi856.
+    WHEN 'LOGS'.
+      PERFORM show_logs.
+    WHEN 'REFRESH'.
+      PERFORM refresh_table.
+    WHEN OTHERS.
+      LEAVE TO SCREEN 0.
+  ENDCASE.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Module STATUS_0100 OUTPUT
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+MODULE status_0100 OUTPUT.
+  SET PF-STATUS 'ZEDI856'.
+  SET TITLEBAR 'ZEDI856'.
+ENDMODULE.
+*&---------------------------------------------------------------------*
+*& Form reprocess_edi856
+*&---------------------------------------------------------------------*
+*& Handle User Action - Reprocessing teh selected ASN's
+*&---------------------------------------------------------------------*
+FORM reprocess_edi856 .
+  DATA: index_rows  TYPE lvc_t_row,
+        index       LIKE LINE OF index_rows,
+        lv_upd_time TYPE sy-uzeit.
+
+  AUTHORITY-CHECK OBJECT 'ZEDI856'
+   ID 'ACTVT' FIELD '10'.
+  IF sy-subrc <> 0.
+    MESSAGE i018 DISPLAY LIKE 'E'.
+    EXIT.
+  ENDIF.
+
+  DATA(lo_obj) = NEW zcl_zotc_i0083_advance_dpc_ext( ) .
+
+  CLEAR index_rows.  REFRESH index_rows.
+  CALL METHOD go_grid->get_selected_rows
+    IMPORTING
+      et_index_rows = index_rows.
+  SELECT SINGLE low FROM zz1_constantvaluetable INTO @DATA(lv_time) WHERE name = 'EDI856_REPOROCESS_HOURS'.
+  IF sy-subrc = 0.
+    lv_upd_time = sy-uzeit - ( lv_time * 3600 ).
+  ENDIF.
+* Do something with those selected rows here
+  LOOP AT index_rows INTO index.
+* Use the index to read the specific line of ALV which is selected
+    READ TABLE go_report->t_report INDEX index-index INTO DATA(wa_report).
+    " If the ASN is not in error status, the do not process
+    IF ( wa_report-status EQ 'I' AND  wa_report-upd_time <= lv_upd_time and wa_report-upd_date = sy-datum )
+      OR (  wa_report-status EQ 'I' AND wa_report-upd_date < sy-datum ).
+      " Raise the event to submit the batch job
+      lo_obj->trigger_event( EXPORTING im_uuid = wa_report-uuid ).
+      MESSAGE s017.
+    ELSEIF wa_report-status NE 'E' AND wa_report-status NE 'U' .
+      MESSAGE i014.
+      CONTINUE.
+    ELSE.
+      " Check if the delivery was successfully process
+      SELECT SINGLE * FROM zz1_status INTO @DATA(ls_status)
+          WHERE delivery EQ @wa_report-delivery AND
+                status = 'S'.
+      IF sy-subrc IS INITIAL.
+        "Delivery &1 is already processed successfully on &2 &3 with ID &4
+        MESSAGE i015 WITH ls_status-delivery ls_status-upd_date ls_status-upd_time ls_status-uuid.
+        CONTINUE.
+      ENDIF.
+      " Raise the event to submit the batch job
+      lo_obj->trigger_event( EXPORTING im_uuid = wa_report-uuid ).
+      MESSAGE s017.
+    ENDIF.
+  ENDLOOP.
+ENDFORM.
+FORM show_logs.
+  DATA: index_rows TYPE lvc_t_row,
+        index      LIKE LINE OF index_rows,
+        l_repid    TYPE sy-repid,
+        iv_delv    TYPE balhdr-extnumber,
+        lv_date    TYPE dats.
+
+  DATA(lo_obj) = NEW zcl_zotc_i0083_advance_dpc_ext( ) .
+
+  CLEAR index_rows.  REFRESH index_rows.
+  CALL METHOD go_grid->get_selected_rows
+    IMPORTING
+      et_index_rows = index_rows.
+
+  IF lines( index_rows ) > 1.
+    MESSAGE 'More than 1 Row selected. Please select exactly 1 Row.' TYPE 'E' DISPLAY LIKE 'I'.
+    EXIT.
+  ENDIF.
+
+* Do something with those selected rows here
+  LOOP AT index_rows INTO index.
+* Use the index to read the specific line of ALV which is selected
+    READ TABLE go_report->t_report INDEX index-index INTO DATA(wa_report).
+    IF sy-subrc = 0.
+      lv_date = sy-datum - 30.
+      IF wa_report-upd_date < lv_date.
+        MESSAGE 'Records Older than 30 days are deleted.' TYPE 'E' DISPLAY LIKE 'I'.
+        EXIT.
+      ENDIF.
+* define report name for display variants
+      l_repid = sy-repid.
+      iv_delv =  |{ wa_report-delivery ALPHA = OUT }|.
+      CONCATENATE '*' iv_delv '*' INTO iv_delv.
+      CONDENSE iv_delv NO-GAPS.
+* call display function module
+      CALL FUNCTION 'APPL_LOG_DISPLAY'
+        EXPORTING
+          object                         = 'ZOTC'
+          object_attribute               = 0
+          subobject                      = 'I0083'
+          subobject_attribute            = 0
+          external_number                = iv_delv
+          external_number_attribute      = 0
+          title_list_screen              = ' '
+          title_selection_screen         = ' '
+          date_from                      = wa_report-upd_date  "#EC DOM_EQUAL
+          date_to                        = sy-datum  "#EC DOM_EQUAL
+          time_to                        = '235959'  "#EC DOM_EQUAL
+          external_number_display_length = 20
+          i_variant_report               = l_repid
+          suppress_selection_dialog      = abap_true
+        EXCEPTIONS
+          no_authority                   = 01.
+      IF sy-subrc NE 0 OR sy-msgty = 'E'.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+      ENDIF.
+    ENDIF.
+    CLEAR : iv_delv, index, wa_report.
+
+  ENDLOOP.
+ENDFORM.
+FORM refresh_table.
+
+  go_report->get_data( ).
+
+  IF go_report->t_report IS INITIAL .
+    MESSAGE i022.
+    LEAVE SCREEN.
+  ENDIF.
+  go_grid->refresh_table_display(
+    EXPORTING
+**      is_stable      =                  " With Stable Rows/Columns
+      i_soft_refresh =  abap_true                " Without Sort, Filter, etc.
+    EXCEPTIONS
+      finished       = 1                " Display was Ended (by Export)
+      OTHERS         = 2
+  ).
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+                    WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+
+  ENDIF.
+ENDFORM.
