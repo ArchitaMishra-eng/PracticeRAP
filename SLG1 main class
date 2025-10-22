@@ -1,0 +1,474 @@
+class ZCL_APP_LOG_HANDLER definition
+  public
+  create public .
+
+public section.
+
+  constants:
+    BEGIN OF gc_msgty,
+        exit    TYPE symsgty VALUE 'X',
+        abort   TYPE symsgty VALUE 'A',
+        error   TYPE symsgty VALUE 'E',
+        warning TYPE symsgty VALUE 'W',
+        info    TYPE symsgty VALUE 'I',
+        success TYPE symsgty VALUE 'S',
+      END OF gc_msgty .
+  constants:
+    BEGIN OF gc_probclass,
+        veryimportant  TYPE balprobcl VALUE '1',
+        important      TYPE balprobcl VALUE '2',
+        medium         TYPE balprobcl VALUE '3',
+        additionalinfo TYPE balprobcl VALUE '4',
+        other          TYPE balprobcl VALUE ' ',
+      END OF gc_probclass .
+  constants:
+    BEGIN OF gc_balmode,
+        batch  TYPE balmode VALUE 'B',
+        dialog TYPE balmode VALUE 'D',
+      END OF gc_balmode .
+  data MV_LOG_HANDLE type BALLOGHNDL .
+  data MT_LOG_MSG type BAL_T_MSG .
+
+  methods CONSTRUCTOR
+    importing
+      !IV_OBJ type BALOBJ_D
+      !IV_SUBOBJ type BALSUBOBJ
+      !IV_EXTEND_NUMBER type BALNREXT optional
+      !IV_CALLING_PROGRAM type SY-CPROG default SY-REPID
+      !IV_TCODE type SY-TCODE default SY-TCODE .
+  methods ADD_SYS_MESSAGE
+    importing
+      !IS_CONTEXT type BAL_S_CONT optional
+      !IS_PARAMS type BAL_S_PARM optional .
+  methods ADD_T100_MESSAGE
+    importing
+      !IV_MSGID type SYMSGID
+      !IV_MSGNO type SYMSGNO
+      !IV_MSGTY type SYMSGTY
+      !IV_MSGV1 type SYMSGV optional
+      !IV_MSGV2 type SYMSGV optional
+      !IV_MSGV3 type SYMSGV optional
+      !IV_MSGV4 type SYMSGV optional
+      !IS_CONTEXT type BAL_S_CONT optional
+      !IS_PARAMS type BAL_S_PARM optional .
+  methods ADD_BOBF_MESSAGE
+    importing
+      !IO_MESSAGES type ref to /BOBF/IF_FRW_MESSAGE .
+  methods ADD_BAPIRET1
+    importing
+      !IT_RETURN type BAPIRET1_TAB optional
+      !IS_RETURN type BAPIRET1 optional .
+  methods ADD_BAPIRET2
+    importing
+      !IT_RETURN type BAPIRET2_T optional
+      !IS_RETURN type BAPIRET2 optional .
+  methods ADD_EXCEPTION
+    importing
+      !IO_EXCEPTION type ref to CX_ROOT
+      !IV_SEVERITY type SYMSGTY default 'W' .
+  methods ADD_TEXT
+    importing
+      !IV_TEXT type STRING
+      !IV_MSGTY type SYMSGTY default 'S'
+      !IS_CONTEXT type BAL_S_CONT optional
+      !IS_PARAMS type BAL_S_PARM optional
+      !IV_DETLEVEL type BALLEVEL default '1' .
+  methods SAVE .
+  methods RESET_MESSAGES .
+  methods HAS_ERROR
+    returning
+      value(RV_ERROR) type BOOLE_D .
+  methods ADD_MESSAGE
+    importing
+      !IS_LOG_MSG type BAL_S_MSG .
+  methods DETERMINE_PCLASS
+    importing
+      !IV_MSGTY type SYMSGTY
+    returning
+      value(RV_RESULT) type BAL_S_MSG-PROBCLASS .
+  PROTECTED SECTION.
+*"* protected components of class ZCL_APP_LOG_HANDLER
+*"* do not include other source files here!!!
+private section.
+ENDCLASS.
+
+
+
+CLASS ZCL_APP_LOG_HANDLER IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->ADD_BAPIRET1
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IT_RETURN                      TYPE        BAPIRET1_TAB(optional)
+* | [--->] IS_RETURN                      TYPE        BAPIRET1(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD add_bapiret1.
+
+    DATA(lt_return) = it_return.
+    IF is_return IS NOT INITIAL.
+      APPEND is_return TO lt_return.
+    ENDIF.
+
+
+* Populate Message
+    LOOP AT lt_return INTO DATA(ls_return).
+      add_t100_message( EXPORTING iv_msgid = ls_return-id
+                                  iv_msgno = ls_return-number
+                                  iv_msgty = ls_return-type
+                                  iv_msgv1 = ls_return-message_v1
+                                  iv_msgv2 = ls_return-message_v2
+                                  iv_msgv3 = ls_return-message_v3
+                                  iv_msgv4 = ls_return-message_v4
+                                  ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->ADD_BAPIRET2
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IT_RETURN                      TYPE        BAPIRET2_T(optional)
+* | [--->] IS_RETURN                      TYPE        BAPIRET2(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD add_bapiret2.
+
+    DATA(lt_return) = it_return.
+    IF is_return IS NOT INITIAL.
+      APPEND is_return TO lt_return.
+    ENDIF.
+
+
+* Populate Message
+    LOOP AT lt_return INTO DATA(ls_return).
+      add_t100_message( EXPORTING iv_msgid = ls_return-id
+                                  iv_msgno = ls_return-number
+                                  iv_msgty = ls_return-type
+                                  iv_msgv1 = ls_return-message_v1
+                                  iv_msgv2 = ls_return-message_v2
+                                  iv_msgv3 = ls_return-message_v3
+                                  iv_msgv4 = ls_return-message_v4
+                                  ).
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->ADD_BOBF_MESSAGE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IO_MESSAGES                    TYPE REF TO /BOBF/IF_FRW_MESSAGE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD add_bobf_message.
+
+    DATA: lo_frw_symsg TYPE REF TO /bobf/cm_frw_symsg, " BOPF Message Class for SYMSG - do not use in AP
+          lv_msgv1     TYPE symsgv,                    " Message Variable
+          lv_msgv2     TYPE symsgv,                    " Message Variable
+          lv_msgv3     TYPE symsgv,                    " Message Variable
+          lv_msgv4     TYPE symsgv.                    " Message Variable
+
+    CHECK io_messages IS BOUND.
+
+    io_messages->get_messages( IMPORTING et_message = DATA(lt_message) ).
+
+    LOOP AT lt_message ASSIGNING FIELD-SYMBOL(<ls_message>).
+
+      TRY .
+
+          lo_frw_symsg ?= <ls_message>-message.
+
+          lv_msgv1 = lo_frw_symsg->mv_attr1.
+          lv_msgv2 = lo_frw_symsg->mv_attr2.
+          lv_msgv3 = lo_frw_symsg->mv_attr3.
+          lv_msgv4 = lo_frw_symsg->mv_attr4.
+
+        CATCH cx_sy_move_cast_error.
+          " WIP - Need to do something here to get the message variables
+          cl_message_helper=>set_msg_vars_for_if_t100_msg( <ls_message>-message ).
+          lv_msgv1 = sy-msgv1.
+          lv_msgv2 = sy-msgv2.
+          lv_msgv3 = sy-msgv3.
+          lv_msgv4 = sy-msgv4.
+
+      ENDTRY.
+
+      add_t100_message( EXPORTING iv_msgid = <ls_message>-message->if_t100_message~t100key-msgid
+                                  iv_msgno = <ls_message>-message->if_t100_message~t100key-msgno
+                                  iv_msgty = <ls_message>-severity
+                                  iv_msgv1 = lv_msgv1 " IF_T100_MESSAGE~T100KEY-attr1
+                                  iv_msgv2 = lv_msgv2
+                                  iv_msgv3 = lv_msgv3
+                                  iv_msgv4 = lv_msgv4
+                  ).
+
+    ENDLOOP. " LOOP AT li_messages ASSIGNING FIELD-SYMBOL(<message>)
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->ADD_EXCEPTION
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IO_EXCEPTION                   TYPE REF TO CX_ROOT
+* | [--->] IV_SEVERITY                    TYPE        SYMSGTY (default ='W')
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD add_exception.
+
+    DATA: lo_exception TYPE REF TO cx_root.
+
+    lo_exception ?= io_exception.
+
+    WHILE lo_exception IS BOUND.
+      add_text( iv_msgty = iv_severity
+                iv_text  = lo_exception->get_text( ) ).
+      lo_exception = lo_exception->previous.
+    ENDWHILE.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->ADD_MESSAGE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_LOG_MSG                     TYPE        BAL_S_MSG
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD add_message.
+
+*    CALL FUNCTION 'BAL_LOG_MSG_ADD'
+*      EXPORTING
+*        i_log_handle  = me->mv_log_handle
+*        i_s_msg       = is_log_msg
+*      EXCEPTIONS
+*        log_not_found = 0
+*        OTHERS        = 1.
+
+    APPEND is_log_msg TO mt_log_msg.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->ADD_SYS_MESSAGE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_CONTEXT                     TYPE        BAL_S_CONT(optional)
+* | [--->] IS_PARAMS                      TYPE        BAL_S_PARM(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD add_sys_message.
+    DATA ls_log_msg TYPE bal_s_msg.
+
+* Define data of message for Application Log
+    ls_log_msg-msgty   = sy-msgty.
+    ls_log_msg-msgid   = sy-msgid.
+    ls_log_msg-msgno   = sy-msgno.
+    ls_log_msg-msgv1   = sy-msgv1.
+    ls_log_msg-msgv2   = sy-msgv2.
+    ls_log_msg-msgv3   = sy-msgv3.
+    ls_log_msg-msgv4   = sy-msgv4.
+    ls_log_msg-context = is_context.
+    ls_log_msg-params  = is_params.
+    ls_log_msg-probclass = me->determine_pclass( ls_log_msg-msgty ).
+
+    add_message( ls_log_msg ).
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->ADD_T100_MESSAGE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_MSGID                       TYPE        SYMSGID
+* | [--->] IV_MSGNO                       TYPE        SYMSGNO
+* | [--->] IV_MSGTY                       TYPE        SYMSGTY
+* | [--->] IV_MSGV1                       TYPE        SYMSGV(optional)
+* | [--->] IV_MSGV2                       TYPE        SYMSGV(optional)
+* | [--->] IV_MSGV3                       TYPE        SYMSGV(optional)
+* | [--->] IV_MSGV4                       TYPE        SYMSGV(optional)
+* | [--->] IS_CONTEXT                     TYPE        BAL_S_CONT(optional)
+* | [--->] IS_PARAMS                      TYPE        BAL_S_PARM(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD add_t100_message.
+    DATA ls_log_msg TYPE bal_s_msg.
+
+* Define data of message for Application Log
+    ls_log_msg-msgty   = iv_msgty.
+    ls_log_msg-msgid   = iv_msgid.
+    ls_log_msg-msgno   = iv_msgno.
+    ls_log_msg-msgv1   = iv_msgv1.
+    ls_log_msg-msgv2   = iv_msgv2.
+    ls_log_msg-msgv3   = iv_msgv3.
+    ls_log_msg-msgv4   = iv_msgv4.
+
+    ls_log_msg-context = is_context.
+    ls_log_msg-params  = is_params.
+
+    ls_log_msg-probclass = me->determine_pclass(  ls_log_msg-msgty ).
+
+    add_message( ls_log_msg ).
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->ADD_TEXT
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_TEXT                        TYPE        STRING
+* | [--->] IV_MSGTY                       TYPE        SYMSGTY (default ='S')
+* | [--->] IS_CONTEXT                     TYPE        BAL_S_CONT(optional)
+* | [--->] IS_PARAMS                      TYPE        BAL_S_PARM(optional)
+* | [--->] IV_DETLEVEL                    TYPE        BALLEVEL (default ='1')
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD add_text.
+
+    DATA :
+      ls_log_msg TYPE bal_s_msg,
+      BEGIN OF ls_string,
+        part1 TYPE symsgv,
+        part2 TYPE symsgv,
+        part3 TYPE symsgv,
+        part4 TYPE symsgv,
+      END OF ls_string.
+
+**********************************************************************
+* create a message
+**********************************************************************
+    ls_string            = iv_text.
+    ls_log_msg-msgty     = iv_msgty.
+    ls_log_msg-msgid     = 'BL'.
+    ls_log_msg-msgno     = '001'.
+    ls_log_msg-msgv1     = ls_string-part1.
+    ls_log_msg-msgv2     = ls_string-part2.
+    ls_log_msg-msgv3     = ls_string-part3.
+    ls_log_msg-msgv4     = ls_string-part4.
+    ls_log_msg-probclass = me->determine_pclass(  iv_msgty ).
+    ls_log_msg-context   = is_context.
+    ls_log_msg-params    = is_params.
+    ls_log_msg-detlevel  = iv_detlevel.
+
+    add_message( ls_log_msg ).
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->CONSTRUCTOR
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_OBJ                         TYPE        BALOBJ_D
+* | [--->] IV_SUBOBJ                      TYPE        BALSUBOBJ
+* | [--->] IV_EXTEND_NUMBER               TYPE        BALNREXT(optional)
+* | [--->] IV_CALLING_PROGRAM             TYPE        SY-CPROG (default =SY-REPID)
+* | [--->] IV_TCODE                       TYPE        SY-TCODE (default =SY-TCODE)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD constructor.
+    DATA: ls_log_header TYPE bal_s_log.
+
+    ls_log_header-extnumber  = iv_extend_number.
+    ls_log_header-object     = iv_obj.
+    ls_log_header-subobject  = iv_subobj.
+    ls_log_header-aluser     = sy-uname.
+    "Delay it to saving time to to make the date & time equal to the change document
+    "ls_log_header-aldate    = sy-datum.
+    "ls_log_header-altime    = sy-uzeit.
+    ls_log_header-altcode    = iv_tcode.
+    ls_log_header-alprog     = iv_calling_program.  "sy-repid ?
+
+    IF sy-batch IS INITIAL.
+      ls_log_header-almode   = gc_balmode-dialog.
+    ELSE.
+      ls_log_header-almode   = gc_balmode-batch.
+    ENDIF.
+
+  "GET log handle
+  CALL FUNCTION 'BAL_LOG_CREATE'
+    EXPORTING
+      i_s_log      = ls_log_header
+    IMPORTING
+      e_log_handle = me->mv_log_handle
+    EXCEPTIONS
+      OTHERS       = 1.
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->DETERMINE_PCLASS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_MSGTY                       TYPE        SYMSGTY
+* | [<-()] RV_RESULT                      TYPE        BAL_S_MSG-PROBCLASS
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD determine_pclass.
+
+    CASE iv_msgty.
+      WHEN gc_msgty-abort OR gc_msgty-exit OR gc_msgty-error.
+        rv_result = gc_probclass-veryimportant.
+      WHEN gc_msgty-warning.
+        rv_result = gc_probclass-important.
+      WHEN gc_msgty-info OR gc_msgty-success.
+        rv_result = gc_probclass-medium.
+      WHEN gc_msgty-success.
+        rv_result = gc_probclass-additionalinfo.
+    ENDCASE.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->HAS_ERROR
+* +-------------------------------------------------------------------------------------------------+
+* | [<-()] RV_ERROR                       TYPE        BOOLE_D
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD has_error.
+
+    IF mt_log_msg[ msgty = 'E' ] IS NOT INITIAL.
+      rv_error = abap_true.
+    ELSE.
+      rv_error = abap_false.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->RESET_MESSAGES
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD reset_messages.
+
+    REFRESH mt_log_msg.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_APP_LOG_HANDLER->SAVE
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD save.
+    DATA lt_log_handle      TYPE bal_t_logh.
+
+    LOOP AT mt_log_msg INTO DATA(ls_log_msg).
+      CALL FUNCTION 'BAL_LOG_MSG_ADD'
+        EXPORTING
+          i_log_handle  = me->mv_log_handle
+          i_s_msg       = ls_log_msg
+        EXCEPTIONS
+          log_not_found = 0
+          OTHERS        = 1.
+    ENDLOOP.
+
+    APPEND me->mv_log_handle TO lt_log_handle.
+
+    CALL FUNCTION 'BAL_DB_SAVE'
+      EXPORTING
+        i_in_update_task = abap_true
+*        i_save_all       = abap_true
+        i_t_log_handle   = lt_log_handle
+      EXCEPTIONS
+        log_not_found    = 1
+        save_not_allowed = 2
+        numbering_error  = 3
+        OTHERS           = 4.
+
+  ENDMETHOD.
+ENDCLASS.
