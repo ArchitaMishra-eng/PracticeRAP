@@ -1,0 +1,319 @@
+@Metadata.layer: #CUSTOMER
+@UI.headerInfo: {
+  typeName: 'IBP Request', 
+  typeNamePlural: 'IBP Requests'
+}
+annotate view ZI_SO_STO_IBP
+    with 
+{   
+     @UI.facet: [
+      {
+    id: 'SO_STO', 
+    label: 'CBO_AUTH', 
+    type: #COLLECTION, 
+    position: 1 
+  }, 
+   {
+    id: 'SO_STOMess', 
+    label: 'Message', 
+    type: #COLLECTION, 
+    position: 4
+  }, 
+   {
+    id: 'SO_STOConv', 
+    label: 'Conversions', 
+    type: #COLLECTION, 
+    position: 2 
+  }, 
+   {
+    id: 'SO_STOProcess', 
+    label: 'Processing Data', 
+    type: #COLLECTION, 
+    position: 3 
+  }, 
+     
+    {
+    id: 'SO_STOGeneralInformation', 
+    parentId: 'SO_STO',
+    label: 'General Information', 
+    type: #FIELDGROUP_REFERENCE, 
+    position: 1 , 
+    targetQualifier: 'GeneralInformation'
+  }, 
+   {
+    id: 'SO_STOConversion', 
+    parentId: 'SO_STOConv', 
+    label: 'General Conversion', 
+    type: #FIELDGROUP_REFERENCE, 
+    position: 1 , 
+    targetQualifier: 'Conversion'
+    
+  },
+   {
+    id: 'SO_STOProcessingSummary', 
+    parentId: 'SO_STOProcess', 
+    label: 'Processing Summary', 
+    type: #FIELDGROUP_REFERENCE, 
+    position: 3 , 
+    targetQualifier: 'ProcessingSummary'
+    
+  },
+   {
+    id: 'SO_STOMessage', 
+    parentId: 'SO_STOMess', 
+    label: 'Messages', 
+    type: #FIELDGROUP_REFERENCE, 
+    position: 4 , 
+    targetQualifier: 'Messages'
+    
+  }
+    ]
+    @UI.hidden: true
+    guid_key;
+    @UI.lineItem: [ {
+    label: 'FileName', 
+    position: 100 
+  } ]
+  @UI.fieldGroup: [ {
+    position: 100 , 
+    label: 'FileName', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Filename;
+      @UI.lineItem: [ {
+    label: 'Srno', 
+    position: 110 
+  } ]
+    @UI.fieldGroup: [ {
+    position: 110 , 
+    label: 'Srno', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Srno;
+      @UI.lineItem: [ {
+    label: 'OrderDate', 
+    position: 120 
+  } ]
+    @UI.fieldGroup: [ {
+    position: 120 , 
+    label: 'Order Date', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Orderdate;
+      @UI.lineItem: [ {
+    label: 'Material', 
+    position: 130 
+  } ]
+    @UI.fieldGroup: [ {
+    position: 130 , 
+    label: 'Material', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Material;
+      @UI.lineItem: [ {
+    label: 'LocID', 
+    position: 140 
+  } ]
+    @UI.fieldGroup: [ {
+    position: 140 , 
+    label: 'LocID', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Locationid;
+      @UI.lineItem: [ {
+    label: 'LocTo', 
+    position: 150 
+  } ]
+    @UI.fieldGroup: [ {
+    position: 150 , 
+    label: 'LocTo', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Locationto;
+      @UI.lineItem: [ {
+    label: 'SupplyingPlant', 
+    position: 160 
+  } ]
+    @UI.fieldGroup: [ {
+    position: 160 , 
+    label: 'SupplyingPlant', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Supplyingplant;
+//    @UI.lineItem: [ {
+//    label: 'Leadtime', 
+//    position: 170 
+//    } ]
+@UI.fieldGroup: [ {
+    position: 190 , 
+    label: 'LeadTime', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Leadtime;
+//     @UI.lineItem: [ {
+//    label: 'OrderDate', 
+//    position: 120 
+//  } ]
+ @UI.fieldGroup: [ {
+    position: 200 , 
+    label: 'Recieving Date', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Recievingdate;
+      @UI.lineItem: [ {
+    label: 'Quantity', 
+    position: 170 
+  } ]
+   @UI.fieldGroup: [ {
+    position: 170 , 
+    label: 'Quantity', 
+    qualifier: 'GeneralInformation'
+  } ]
+    Quantity;
+//    Baseuom;
+//    S4uom;
+      @UI.lineItem: [ {
+    label: 'SO/STO', 
+    position: 180 
+  } ]
+   @UI.fieldGroup: [ {
+    position: 180 , 
+    label: 'SO/STO', 
+    qualifier: 'GeneralInformation'
+  } ]
+    SoSto;
+    @UI.fieldGroup: [ {
+    position: 100 , 
+    label: 'Material Group', 
+    qualifier: 'Conversion'
+  } ]
+    Materialgroup;
+    @UI.fieldGroup: [ {
+    position: 110 , 
+    label: 'Dangerous?', 
+    qualifier: 'Conversion'
+  } ]
+    Dangerous;
+    @UI.fieldGroup: [ {
+    position: 120 , 
+    label: 'Implant?', 
+    qualifier: 'Conversion'
+  } ]
+    Implant;
+    @UI.fieldGroup: [ {
+    position: 140 , 
+    label: 'Sold-To?', 
+    qualifier: 'Conversion'
+  } ]
+    SoldTo;
+    @UI.fieldGroup: [ {
+    position: 150 , 
+    label: 'Ship-To', 
+    qualifier: 'Conversion'
+  } ]
+    ShipTo;
+    @UI.fieldGroup: [ {
+    position: 160 , 
+    label: 'Supplier', 
+    qualifier: 'Conversion'
+  } ]
+    Supplier;
+    @UI.fieldGroup: [ {
+    position: 170 , 
+    label: 'Recieving Plant', 
+    qualifier: 'Conversion'
+  } ]
+    RecievingPlant;
+    @UI.fieldGroup: [ {
+    position: 180 , 
+    label: 'Supplying Storage location', 
+    qualifier: 'Conversion'
+  } ]
+    StorageLocationFrom;
+    @UI.fieldGroup: [ {
+    position: 190 , 
+    label: 'Recieving Storage Location', 
+    qualifier: 'Conversion'
+  } ]
+    StorageLocationTo;
+    @UI.fieldGroup: [ {
+    position: 200 , 
+    label: 'Document Type', 
+    qualifier: 'Conversion'
+  } ]
+    DocumentType;
+    @UI.fieldGroup: [ {
+    position: 210 , 
+    label: 'Process', 
+    qualifier: 'Conversion'
+  } ]
+    ProcessName;
+    @UI.fieldGroup: [ {
+    position: 220 , 
+    label: 'Purchase Org.', 
+    qualifier: 'Conversion'
+  } ]
+    PurchaseOrg;
+    @UI.fieldGroup: [ {
+    position: 240 , 
+    label: 'Company Code', 
+    qualifier: 'Conversion'
+  } ]
+    CompanyCode;
+    @UI.fieldGroup: [ {
+    position: 250 , 
+    label: 'Purchase Group', 
+    qualifier: 'Conversion'
+  } ]
+    PurchaseGroup;
+@UI.fieldGroup: [ {
+    position: 100 , 
+    label: 'Max Lines', 
+    qualifier: 'ProcessingSummary'
+  } ]
+    MaxLines;
+    @UI.fieldGroup: [ {
+    position: 110 , 
+    label: 'Max Quantity', 
+    qualifier: 'ProcessingSummary'
+  } ]
+    MaxQuant;
+    @UI.fieldGroup: [ {
+    position: 120 , 
+    label: 'Temp Order', 
+    qualifier: 'ProcessingSummary'
+  } ]
+    TmpOrd;
+//    Destplant;
+//    Destloc;
+//    Split_count;
+  @UI.lineItem: [ {
+    label: 'OrderStatus', 
+    position: 190 
+  } ]
+   @UI.fieldGroup: [ {
+    position: 130 , 
+    label: 'OrderStatus', 
+    qualifier: 'ProcessingSummary'
+  } ]
+    Orderstatus;
+      @UI.lineItem: [ {
+    label: 'Documents', 
+    position: 200 
+  } ]
+     @UI.fieldGroup: [ {
+    position: 140 , 
+    label: 'Documents', 
+    qualifier: 'ProcessingSummary'
+  } ]
+    Orderno;
+      @UI.fieldGroup: [ {
+    position: 100 , 
+    label: 'Log', 
+    qualifier: 'Messages'
+  } ]
+  @UI.multiLineText: true
+  
+    Message;
+    //RequestId;
+}
